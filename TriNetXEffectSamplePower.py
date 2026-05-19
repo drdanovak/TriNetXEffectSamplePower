@@ -1166,11 +1166,15 @@ with tab_report:
 
     report_lines = []
     for _, r in summary.iterrows():
-        st.markdown(f"### {r['Finding']}")
-        st.write(r["Narrative Interpretation"])
-        report_lines.append(f"## {r['Finding']}
+        finding_name = str(r.get("Finding", "Outcome"))
+        narrative_text = str(r.get("Narrative Interpretation", ""))
 
-{r['Narrative Interpretation']}
+        st.markdown("### " + finding_name)
+        st.write(narrative_text)
+
+        report_lines.append("## " + finding_name + "
+
+" + narrative_text + "
 ")
 
     report_text = "
