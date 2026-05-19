@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import streamlit as st
+import html
 from scipy.stats import norm
 
 st.set_page_config(layout="wide", page_title="TriNetX Outcomes Interpretation Tool")
@@ -741,11 +742,315 @@ components = pd.DataFrame(component_rows)
 # ============================================================
 # UI: results display
 # ============================================================
-st.subheader("2. Review results by component")
-
-tab_summary, tab_report, tab_components, tab_methods = st.tabs(
-    ["Summary table", "Narrative report", "Component cards", "Methods notes"]
+st.subheader("2. Review component cards")
+st.write(
+    "Start here. Each card separates one interpretive metric and uses color-coded thresholds to help users quickly distinguish "
+    "strong, adequate, borderline, low, or potentially concerning findings."
 )
+
+st.markdown(
+    """
+<style>
+.metric-card {
+    border-radius: 18px;
+    padding: 1.05rem 1.15rem;
+    margin-bottom: 0.9rem;
+    border: 1.5px solid #d0d7de;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+.metric-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.55rem;
+}
+.metric-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #111827;
+}
+.status-pill {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.metric-value {
+    font-size: 2.0rem;
+    line-height: 1.1;
+    font-weight: 800;
+    margin-bottom: 0.35rem;
+    color: #111827;
+}
+.metric-interpretation {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 0.45rem;
+    color: #1f2937;
+}
+.metric-explanation {
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: #374151;
+}
+.metric-success {
+    background: #ecfdf5;
+    border-color: #10b981;
+}
+.metric-success .status-pill {
+    background: #d1fae5;
+    color: #065f46;
+}
+.metric-warning {
+    background: #fffbeb;
+    border-color: #f59e0b;
+}
+.metric-warning .status-pill {
+    background: #fef3c7;
+    color: #92400e;
+}
+.metric-danger {
+    background: #fef2f2;
+    border-color: #ef4444;
+}
+.metric-danger .status-pill {
+    background: #fee2e2;
+    color: #991b1b;
+}
+.metric-info {
+    background: #eff6ff;
+    border-color: #3b82f6;
+}
+.metric-info .status-pill {
+    background: #dbeafe;
+    color: #1e40af;
+}
+.metric-magnitude {
+    background: #f5f3ff;
+    border-color: #8b5cf6;
+}
+.metric-magnitude .status-pill {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+.metric-neutral {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+.metric-neutral .status-pill {
+    background: #e2e8f0;
+    color: #334155;
+}
+.threshold-note {
+    font-size: 0.85rem;
+    color: #475569;
+    margin-top: -0.25rem;
+    margin-bottom: 0.9rem;
+}
+</style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+def escape_text(value):
+    """Safely escape values shown inside custom HTML cards."""
+    if value is None:
+        return "N/A"
+    return html.escape(str(value))
+
+
+def power_card_status(interpretation):
+    interp = str(interpretation).lower()
+    if "high" in interp:
+        return "metric-success", "High / exceeds target"
+    if "adequate" in interp:
+        return "metric-success", "Meets target"
+    if "very underpowered" in interp:
+        return "metric-danger", "Low / below threshold"
+    if "underpowered" in interp:
+        return "metric-warning", "Borderline / below target"
+    return "metric-neutral", "Not interpretable"
+
+
+def evalue_card_status(interpretation):
+    interp = str(interpretation).lower()
+    if "very large" in interp:
+        return "metric-success", "High robustness"
+    if "large" in interp:
+        return "metric-success", "High robustness"
+    if "moderate" in interp:
+        return "metric-info", "Moderate robustness"
+    if "small" in interp:
+        return "metric-warning", "Low robustness"
+    if "minimal" in interp:
+        return "metric-danger", "Very low robustness"
+    return "metric-neutral", "Not interpretable"
+
+
+def nnt_card_status(value, interpretation):
+    interp = str(interpretation).lower()
+    value_text = str(value).upper()
+    is_harm = value_text.startswith("NNH")
+
+    if "not interpretable" in interp:
+        return "metric-neutral", "Not interpretable"
+
+    if is_harm:
+        if "large absolute" in interp:
+            return "metric-danger", "High harm signal"
+        if "moderate" in interp:
+            return "metric-warning", "Moderate harm signal"
+        if "small" in interp:
+            return "metric-info", "Low harm signal"
+        return "metric-warning", "Potential harm"
+
+    if "large absolute" in interp:
+        return "metric-success", "High benefit / impact"
+    if "moderate" in interp:
+        return "metric-info", "Moderate impact"
+    if "small" in interp:
+        return "metric-neutral", "Low absolute impact"
+    return "metric-neutral", "Not interpretable"
+
+
+def standardized_effect_card_status(interpretation):
+    interp = str(interpretation).lower()
+    if "large" in interp:
+        return "metric-magnitude", "High magnitude"
+    if "medium" in interp:
+        return "metric-info", "Medium magnitude"
+    if "small standardized" in interp:
+        return "metric-warning", "Small magnitude"
+    if "very small" in interp or "trivial" in interp:
+        return "metric-neutral", "Very small magnitude"
+    return "metric-neutral", "Not interpretable"
+
+
+def colored_metric_card(title, value, interpretation, explanation, status_class, status_label):
+    st.markdown(
+        f"""
+<div class="metric-card {status_class}">
+    <div class="metric-card-header">
+        <span class="metric-title">{escape_text(title)}</span>
+        <span class="status-pill">{escape_text(status_label)}</span>
+    </div>
+    <div class="metric-value">{escape_text(value)}</div>
+    <div class="metric-interpretation">{escape_text(interpretation)}</div>
+    <div class="metric-explanation">{escape_text(explanation)}</div>
+</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def style_component_rows(row):
+    """Apply light background colors to the component-level table based on interpretation."""
+    component = str(row.get("Component", "")).lower()
+    interpretation = str(row.get("Interpretation", ""))
+    value = str(row.get("Value", ""))
+
+    if component == "power":
+        status_class, _ = power_card_status(interpretation)
+    elif component == "e-value":
+        status_class, _ = evalue_card_status(interpretation)
+    elif component == "nnt/nnh":
+        status_class, _ = nnt_card_status(value, interpretation)
+    elif "standardized" in component:
+        status_class, _ = standardized_effect_card_status(interpretation)
+    else:
+        status_class = "metric-neutral"
+
+    color_map = {
+        "metric-success": "background-color: #ecfdf5;",
+        "metric-warning": "background-color: #fffbeb;",
+        "metric-danger": "background-color: #fef2f2;",
+        "metric-info": "background-color: #eff6ff;",
+        "metric-magnitude": "background-color: #f5f3ff;",
+        "metric-neutral": "background-color: #f8fafc;",
+    }
+    style = color_map.get(status_class, "")
+    return [style] * len(row)
+
+
+tab_components, tab_summary, tab_report, tab_methods = st.tabs(
+    ["Component cards", "Metric summary tables", "Narrative report", "Methods notes"]
+)
+
+with tab_components:
+    if summary.empty:
+        st.info("No valid findings to display.")
+    else:
+        selected_finding = st.selectbox("Choose a finding", summary["Finding"].tolist())
+        r = summary[summary["Finding"] == selected_finding].iloc[0]
+
+        st.markdown(f"### {selected_finding}")
+        st.caption(
+            f"Orientation check: {r['Treated/Exposed Group']} is treated/exposed and {r['Control/Comparison Group']} is the comparison group. "
+            f"Observed risks: {r['Treated Risk']} vs. {r['Control Risk']}."
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            status_class, status_label = power_card_status(r["Power Interpretation"])
+            colored_metric_card(
+                "Power",
+                r["Power"],
+                r["Power Interpretation"],
+                r["Power Explanation"],
+                status_class,
+                status_label,
+            )
+
+            status_class, status_label = nnt_card_status(r["NNT/NNH"], r["NNT/NNH Interpretation"])
+            colored_metric_card(
+                "Absolute impact: NNT/NNH",
+                r["NNT/NNH"],
+                r["NNT/NNH Interpretation"],
+                r["NNT/NNH Explanation"],
+                status_class,
+                status_label,
+            )
+
+        with col2:
+            status_class, status_label = evalue_card_status(r["E-value Interpretation"])
+            colored_metric_card(
+                "E-value sensitivity",
+                r["E-value"],
+                r["E-value Interpretation"],
+                r["E-value Explanation"],
+                status_class,
+                status_label,
+            )
+
+            status_class, status_label = standardized_effect_card_status(r["Cohen-style Effect Interpretation"])
+            colored_metric_card(
+                "Standardized effect size",
+                r["Cohen's h"],
+                r["Cohen-style Effect Interpretation"],
+                r["Standardized Effect Explanation"],
+                status_class,
+                status_label,
+            )
+
+        st.markdown(
+            "<div class='threshold-note'>Color key: green = meets target or high benefit/robustness; yellow = low or borderline; "
+            "red = very low or concerning; blue/purple = magnitude or moderate robustness rather than inherently good or bad.</div>",
+            unsafe_allow_html=True,
+        )
+
+        st.divider()
+        st.markdown("#### Metric-level table for selected finding")
+        selected_components = components[components["Finding"] == selected_finding]
+        st.dataframe(
+            selected_components.style.apply(style_component_rows, axis=1),
+            hide_index=True,
+            use_container_width=True,
+        )
 
 with tab_summary:
     st.write(
@@ -863,49 +1168,19 @@ with tab_report:
     for _, r in summary.iterrows():
         st.markdown(f"### {r['Finding']}")
         st.write(r["Narrative Interpretation"])
-        report_lines.append(f"## {r['Finding']}\n\n{r['Narrative Interpretation']}\n")
+        report_lines.append(f"## {r['Finding']}
 
-    report_text = "\n".join(report_lines)
+{r['Narrative Interpretation']}
+")
+
+    report_text = "
+".join(report_lines)
     st.download_button(
         "Download narrative report as Markdown",
         data=report_text.encode("utf-8"),
         file_name="trinetx_interpretive_report.md",
         mime="text/markdown",
     )
-
-with tab_components:
-    if summary.empty:
-        st.info("No valid findings to display.")
-    else:
-        selected_finding = st.selectbox("Choose a finding", summary["Finding"].tolist())
-        r = summary[summary["Finding"] == selected_finding].iloc[0]
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("#### Power")
-            st.metric("Estimated power", r["Power"])
-            st.write(f"**Interpretation:** {r['Power Interpretation']}")
-            st.write(r["Power Explanation"])
-
-            st.markdown("#### NNT/NNH")
-            st.metric("Absolute impact", r["NNT/NNH"])
-            st.write(f"**Interpretation:** {r['NNT/NNH Interpretation']}")
-            st.write(r["NNT/NNH Explanation"])
-
-        with col2:
-            st.markdown("#### E-value")
-            st.metric("E-value", r["E-value"])
-            st.write(f"**Interpretation:** {r['E-value Interpretation']}")
-            st.write(r["E-value Explanation"])
-
-            st.markdown("#### Cohen-style effect size")
-            st.metric("Cohen's h", r["Cohen's h"])
-            st.write(f"**Interpretation:** {r['Cohen-style Effect Interpretation']}")
-            st.write(r["Standardized Effect Explanation"])
-
-        st.divider()
-        st.markdown("#### Component-level table")
-        st.dataframe(components[components["Finding"] == selected_finding], hide_index=True, use_container_width=True)
 
 with tab_methods:
     st.markdown("### Interpretation rules used by this tool")
@@ -919,6 +1194,8 @@ with tab_methods:
 **NNT/NNH** is calculated from the absolute risk difference. For adverse outcomes, lower risk in the treated/exposed group is interpreted as benefit and higher risk as harm. For beneficial outcomes, this direction is reversed. Smaller NNT or NNH values indicate larger absolute clinical impact, but clinical meaning depends on outcome severity, follow-up duration, baseline risk, and intervention burden.
 
 **Cohen-style standardized effect size** is reported as Cohen's h because TriNetX outcome risks are proportions. Cohen's d is generally used for continuous outcomes; Cohen's h is the appropriate Cohen-family standardized effect size for comparing two proportions. Rule-of-thumb thresholds are: <0.20 very small/trivial, 0.20 to <0.50 small, 0.50 to <0.80 medium, and ≥0.80 large.
+
+**Color coding** is used as an interpretive aid. Green indicates that a metric meets its target or suggests high benefit/robustness. Yellow indicates borderline or low values. Red indicates very low robustness, insufficient power, or a potentially concerning harm signal. Blue and purple indicate magnitude or moderate robustness rather than inherently good or bad findings.
         """
     )
 
