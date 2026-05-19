@@ -748,35 +748,113 @@ tab_summary, tab_report, tab_components, tab_methods = st.tabs(
 )
 
 with tab_summary:
-    display_cols = [
-        "Finding",
-        "Treated/Exposed Group",
-        "Control/Comparison Group",
-        "Treated Risk",
-        "Control Risk",
-        "Power",
-        "Power Interpretation",
-        "RR",
-        "RR 95% CI",
-        "E-value",
-        "E-value CI-limit",
-        "E-value Interpretation",
-        "Risk Difference",
-        "NNT/NNH",
-        "NNT/NNH Interpretation",
-        "Cohen's h",
-        "Cohen-style Effect Interpretation",
-        "Notes",
-    ]
-    st.dataframe(summary[display_cols], hide_index=True, use_container_width=True)
-
-    csv_bytes = summary.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Download full results as CSV",
-        data=csv_bytes,
-        file_name="trinetx_interpreted_outcomes_summary.csv",
-        mime="text/csv",
+    st.write(
+        "The results are separated by metric so users can review each finding without scrolling across one very wide table. "
+        "Each table answers a different interpretive question."
     )
+
+    def show_metric_table(title, description, columns, dataframe=summary):
+        """Display a focused table for one interpretive metric."""
+        existing_columns = [c for c in columns if c in dataframe.columns]
+        if not existing_columns:
+            return
+
+        st.markdown(f"### {title}")
+        st.caption(description)
+        st.dataframe(dataframe[existing_columns], hide_index=True, use_container_width=True)
+
+    show_metric_table(
+        "Cohort and risk overview",
+        "Use this table first to confirm that the treated/exposed group, comparison group, sample sizes, and risks are oriented correctly.",
+        [
+            "Finding",
+            "Treated/Exposed Group",
+            "Control/Comparison Group",
+            "Group 1 N",
+            "Group 2 N",
+            "Risk 1",
+            "Risk 2",
+            "Treated Risk",
+            "Control Risk",
+            "Notes",
+        ],
+    )
+
+    show_metric_table(
+        "Power analysis",
+        "Power addresses whether the available sample is likely to detect a difference of the observed magnitude. It should not be interpreted as clinical importance.",
+        [
+            "Finding",
+            "Power",
+            "Power Interpretation",
+            "Required N1",
+            "Required N2",
+            "Power Explanation",
+        ],
+    )
+
+    show_metric_table(
+        "E-value sensitivity analysis",
+        "The E-value describes robustness to unmeasured confounding on the risk-ratio scale. It is not a conventional effect size and is not causal proof.",
+        [
+            "Finding",
+            "RR",
+            "RR 95% CI",
+            "E-value",
+            "E-value CI-limit",
+            "E-value Interpretation",
+            "E-value Explanation",
+        ],
+    )
+
+    show_metric_table(
+        "Absolute impact: risk difference and NNT/NNH",
+        "NNT/NNH translates the absolute risk difference into an interpretable clinical impact metric. Smaller NNT or NNH values indicate larger absolute impact.",
+        [
+            "Finding",
+            "Risk Difference",
+            "RD 95% CI",
+            "NNT/NNH",
+            "NNT/NNH 95% CI",
+            "NNT/NNH Interpretation",
+            "NNT/NNH Explanation",
+        ],
+    )
+
+    show_metric_table(
+        "Standardized effect size for binary outcomes",
+        "For two risk/proportion outcomes, the Cohen-family standardized effect size is Cohen's h rather than Cohen's d.",
+        [
+            "Finding",
+            "Cohen's h",
+            "Cohen-style Effect Interpretation",
+            "Standardized Effect Explanation",
+        ],
+    )
+
+    with st.expander("Show full combined results table"):
+        st.dataframe(summary, hide_index=True, use_container_width=True)
+
+    st.divider()
+    col_download1, col_download2 = st.columns(2)
+
+    with col_download1:
+        csv_bytes = summary.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Download full results as CSV",
+            data=csv_bytes,
+            file_name="trinetx_interpreted_outcomes_summary.csv",
+            mime="text/csv",
+        )
+
+    with col_download2:
+        component_csv_bytes = components.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Download metric-level results as CSV",
+            data=component_csv_bytes,
+            file_name="trinetx_metric_level_interpretations.csv",
+            mime="text/csv",
+        )
 
 with tab_report:
     st.write("This report is intended to give users language they can adapt for methods checks, internal review, or manuscript planning.")
